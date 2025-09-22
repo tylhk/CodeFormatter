@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <title>代码格式化</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --gap: 14px;
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #22d3ee;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+
+    header .right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+    }
+
+    main {
+      height: calc(100vh - 62px);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: var(--gap);
+      padding: var(--gap);
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .pane header {
+      background: #0b1220;
+      border: 0;
+      border-bottom: 1px solid #1f2937;
+      padding: 10px 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .pane textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      padding: 12px;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      tab-size: 2;
+    }
+
+    .center {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      align-items: start;
+      gap: var(--gap);
+      min-width: 240px;
+      padding: 6px;
+    }
+
+    .card {
+      background: #0b1220;
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    label,
+    select {
+      font-size: 13px;
+      color: #d1d5db;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    select,
+    input[type="number"] {
+      background: #0f172a;
+      border: 1px solid #1f2937;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      width: 100%;
+    }
+
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: linear-gradient(180deg, #0ea5e9, #06b6d4);
+      color: #001018;
+      font-weight: 700;
+      letter-spacing: .2px;
+      cursor: pointer;
+    }
+
+    .btn.secondary {
+      background: linear-gradient(180deg, #34d399, #10b981);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #0b1220;
+      border: 1px solid #1f2937;
+      border-radius: 999px;
+      color: var(--muted);
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tiny {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .right header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .copy-btn {
+      appearance: none;
+      border: 1px solid #1f2937;
+      background: #0f172a;
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+  </style>
+
+  <!-- Prettier：用于常规格式化 -->
+  <script src="https://unpkg.com/prettier@3.3.3/standalone.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/babel.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/estree.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/typescript.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/html.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/postcss.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/markdown.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/yaml.js"></script>
+
+  <!-- CSSO：可选（存在则优先使用），若加载失败将自动回退到内置 CSSOM 去重器 -->
+  <script src="https://unpkg.com/csso@5.0.5/dist/csso.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1>代码格式化器（含 CSS 去重优化）</h1>
+    <div class="right">
+      <span class="pill">Prettier</span>
+      <span class="pill">CSSO / CSSOM</span>
+      <span class="tiny">所有处理在本地浏览器完成</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane left">
+      <header>原始代码</header>
+      <textarea id="input" placeholder="在这里粘贴需要格式化的代码或 CSS…"></textarea>
+    </section>
+
+    <section class="center">
+      <div class="card controls">
+        <div class="row">
+          <label for="language">语言/解析器</label>
+          <select id="language">
+            <option value="auto">自动（尽力选择）</option>
+            <option value="babel">JavaScript / JSX（babel）</option>
+            <option value="typescript">TypeScript / TSX</option>
+            <option value="json">JSON</option>
+            <option value="html">HTML</option>
+            <option value="css">CSS / SCSS / Less</option>
+            <option value="markdown">Markdown</option>
+            <option value="yaml">YAML</option>
+            <option value="plain">纯文本 / 其它（仅空行压缩与可选注释移除）</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="tabWidth">缩进宽度</label>
+          <input id="tabWidth" type="number" min="1" max="8" value="2" />
+        </div>
+
+        <div class="checkbox">
+          <input id="rmComments" type="checkbox" />
+          <label for="rmComments">移除所有注释（块注释与行内注释）</label>
+        </div>
+
+        <div class="checkbox">
+          <input id="semi" type="checkbox" checked />
+          <label for="semi">行尾分号（JS/TS）</label>
+        </div>
+
+        <div class="checkbox">
+          <input id="singleQuote" type="checkbox" />
+          <label for="singleQuote">JS/TS/JSON 使用单引号</label>
+        </div>
+
+        <button id="format" class="btn" title="或使用 Ctrl/⌘ + Enter">格式化 → 右侧</button>
+        <div class="note">普通格式化：Prettier + 空行压缩（可选注释移除）。</div>
+      </div>
+
+      <div class="card controls">
+        <div class="checkbox">
+          <input id="cssMinified" type="checkbox" />
+          <label for="cssMinified">CSS 优化后保持压缩（不再美化）</label>
+        </div>
+        <button id="optCss" class="btn secondary" title="对 CSS 执行去重/去覆盖/合并等优化">CSS 去重/覆盖优化 → 右侧</button>
+        <div class="note">优先使用 CSSO；若不可用则使用内置 CSSOM 去重器，合并重复规则并只保留同一选择器中**最后生效**的属性。</div>
+      </div>
+    </section>
+
+    <section class="pane right">
+      <header>
+        <span>输出结果</span>
+        <button id="copy" class="copy-btn" title="复制到剪贴板">复制</button>
+      </header>
+      <textarea id="output" placeholder="点击左侧按钮后结果会显示在这里…" readonly></textarea>
+    </section>
+  </main>
+
+  <script>
+    // =============== 通用工具 ===============
+    function pickParser(lang, sample) {
+      if (lang && lang !== "auto") return lang === "plain" ? null : lang;
+      const s = (sample || "").trim();
+      if (/^\s*[\{\[][\s\S]*[\}\]]\s*$/.test(s)) return "json";
+      if (/<[a-z!][\s\S]*>/i.test(s)) return "html";
+      if (/^\s*(-\s|\w+:)/m.test(s)) return "yaml";
+      if (/\b(function|const|let|=>|import|export|class|return)\b/.test(s)) return "babel";
+      if (/[{;]\s*[a-z-]+\s*:\s*[^;]+;/.test(s)) return "css"; // 粗略识别 css 片段
+      return "babel";
+    }
+  
+    function squeezeBlankLines(code) {
+      if (!code) return code;
+      return code.replace(/\s+$/gm, "").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+    }
+  
+    // =============== JS 注释移除（增强版） ===============
+    // 近似词法器：处理字符串/模板字符串/正则/转义，尽量不误删
+    function stripJsComments(input) {
+      let out = "";
+      let i = 0, c = "", next = "";
+      let inS = false, inD = false, inT = false, inBlock = false, inLine = false, inRegex = false;
+      let esc = false;
+      const isWs = (ch) => /\s/.test(ch);
+      const beforeIsRegex = (prevOut) => {
+        // 在这些符号后出现 / 更可能是正则开头（非常简化，但比瞎删好）
+        const t = prevOut.trimEnd();
+        const ch = t[t.length - 1];
+        return !ch || "({[=:+!&|?,;*%^~<>".includes(ch);
+      };
+  
+      while (i < input.length) {
+        c = input[i];
+        next = input[i + 1];
+  
+        // 结束行注释
+        if (inLine) {
+          if (c === "\n") { inLine = false; out += c; }
+          i++;
+          continue;
+        }
+  
+        // 结束块注释
+        if (inBlock) {
+          if (c === "*" && next === "/") { inBlock = false; i += 2; continue; }
+          i++;
+          continue;
+        }
+  
+        // 字符串/模板字符串
+        if (inS) { // 单引号
+          out += c;
+          if (!esc && c === "'") inS = false;
+          esc = !esc && c === "\\";
+          i++;
+          continue;
+        }
+        if (inD) { // 双引号
+          out += c;
+          if (!esc && c === '"') inD = false;
+          esc = !esc && c === "\\";
+          i++;
+          continue;
+        }
+        if (inT) { // 模板字符串
+          out += c;
+          if (!esc && c === "`") inT = false;
+          // 处理模板中的 ${ ... }
+          if (!esc && c === "$" && next === "{") { out += "{"; i += 2; continue; }
+          esc = !esc && c === "\\";
+          i++;
+          continue;
+        }
+  
+        // 正则字面量
+        if (inRegex) {
+          out += c;
+          if (!esc && c === "/") {
+            inRegex = false;
+            // 读取修饰符
+            let j = i + 1;
+            while (/[a-z]/i.test(input[j])) { out += input[j]; j++; }
+            i = j;
+            continue;
+          }
+          esc = !esc && c === "\\";
+          i++;
+          continue;
+        }
+  
+        // 可能进入注释/正则/字符串
+        if (c === "/") {
+          if (next === "/") { inLine = true; i += 2; continue; }
+          if (next === "*") { inBlock = true; i += 2; continue; }
+          // 可能是正则
+          if (beforeIsRegex(out)) { inRegex = true; out += c; i++; continue; }
+          // 否则当作除号
+          out += c; i++; continue;
+        }
+        if (c === "'") { inS = true; out += c; i++; esc = false; continue; }
+        if (c === '"') { inD = true; out += c; i++; esc = false; continue; }
+        if (c === "`") { inT = true; out += c; i++; esc = false; continue; }
+  
+        out += c;
+        i++;
+      }
+      return out;
+    }
+  
+    function removeComments(code, parser) {
+      if (!code) return code;
+      if (parser === "babel" || parser === "typescript") return stripJsComments(code);
+      const stripC = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
+      const stripHash = (src) => src.replace(/(^|\s)#(?!\!)[^\n\r]*/g, "$1");
+      const stripHTML = (src) => src.replace(/<!--([\s\S]*?)-->/g, "");
+      if (parser === "html" || /<\w|\s<!DOCTYPE/i.test(code)) return stripHTML(code);
+      if (parser === "yaml" || parser === "markdown") return stripHash(code);
+      if (parser === "json") return code;
+      let out = stripC(code);
+      out = stripHash(out);
+      return out;
+    }
+  
+    // =============== CSS 去重 + 短写 + 合并相同 @media ===============
+    // —— 工具：四方向合并为短写 —— //
+    function condenseBox(v) {
+      const t=v.top, r=v.right, b=v.bottom, l=v.left;
+      if (t===r && r===b && b===l) return t;
+      if (t===b && r===l) return `${t} ${r}`;
+      if (r===l) return `${t} ${r} ${b}`;
+      return `${t} ${r} ${b} ${l}`;
+    }
+  
+    // 将 longhand 合成 shorthand，并去掉 'initial'
+    function shorthandify(declMap) {
+      const out = new Map(declMap);
+  
+      // 去 initial
+      for (const [k,v] of Array.from(out)) {
+        if (typeof v==='string' && v.trim()==='initial') out.delete(k);
+      }
+  
+      // padding / margin
+      const packBox = (base)=>{
+        const T=`${base}-top`, R=`${base}-right`, B=`${base}-bottom`, L=`${base}-left`;
+        if (out.has(T) && out.has(R) && out.has(B) && out.has(L)) {
+          const val = condenseBox({top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L)});
+          out.delete(T); out.delete(R); out.delete(B); out.delete(L);
+          out.set(base, val);
+        }
+      };
+      packBox('padding');
+      packBox('margin');
+  
+      // border 合并
+      const W=(s)=>`border-${s}-width`, S=(s)=>`border-${s}-style`, C=(s)=>`border-${s}-color`;
+      const sides=['top','right','bottom','left'];
+      const allSideHave = (gen)=>sides.every(side => out.has(gen(side)));
+      const sideEqual = (gen)=>sides.every(side => out.get(gen(side))===out.get(gen(sides[0])));
+      if (allSideHave(W) && allSideHave(S) && allSideHave(C) && sideEqual(W) && sideEqual(S) && sideEqual(C)) {
+        const bw = out.get(W('top')), bs = out.get(S('top')), bc = out.get(C('top'));
+        sides.forEach(side => { out.delete(W(side)); out.delete(S(side)); out.delete(C(side)); });
+        out.set('border', `${bw} ${bs} ${bc}`);
+      } else {
+        for (const side of sides) {
+          const w = out.get(W(side)), s = out.get(S(side)), c = out.get(C(side));
+          if (w || s || c) {
+            const parts = [];
+            if (w) parts.push(w);
+            if (s) parts.push(s);
+            if (c) parts.push(c);
+            out.set(`border-${side}`, parts.join(' '));
+            out.delete(W(side)); out.delete(S(side)); out.delete(C(side));
+          }
+        }
+      }
+  
+      // background-color -> background（若只有颜色）
+      const bgKeys = Array.from(out.keys()).filter(k=>k.startsWith('background-'));
+      if (out.has('background-color') && bgKeys.every(k=>k==='background-color')) {
+        out.set('background', out.get('background-color'));
+        out.delete('background-color');
+      }
+  
+      return out;
+    }
+  
+    // 把 CSS 解析进离屏文档 → 合并同选择器、同 media
+    function parseCssToScope(cssText) {
+      const offdoc = document.implementation.createHTMLDocument("");
+      const style = offdoc.createElement("style");
+      style.textContent = cssText;
+      offdoc.head.append(style);
+      const sheet = style.sheet;
+  
+      function visit(ruleList) {
+        const scope = { selectors: new Map(), order: [], medias: [], raw: [] };
+        for (let i = 0; i < ruleList.length; i++) {
+          const rule = ruleList[i];
+          if (rule.type === CSSRule.STYLE_RULE) {
+            const sel = rule.selectorText;
+            if (!scope.selectors.has(sel)) { scope.selectors.set(sel, new Map()); scope.order.push(sel); }
+            const declMap = scope.selectors.get(sel);
+            const styleDecl = rule.style;
+            for (let j = 0; j < styleDecl.length; j++) {
+              const prop = styleDecl.item(j);
+              const val = styleDecl.getPropertyValue(prop).trim();
+              const pri = styleDecl.getPropertyPriority(prop);
+              declMap.set(prop, val + (pri ? " !" + pri : ""));
+            }
+          } else if (rule.type === CSSRule.MEDIA_RULE) {
+            scope.medias.push({ mediaText: rule.media.mediaText, inner: visit(rule.cssRules) });
+          } else {
+            scope.raw.push(rule.cssText);
+          }
+        }
+        return scope;
+      }
+      return visit(sheet.cssRules);
+    }
+  
+    // 合并两个 scope（后者覆盖前者）
+    function mergeScopes(base, add) {
+      // merge selectors
+      for (const sel of add.order) {
+        if (!base.selectors.has(sel)) { base.selectors.set(sel, new Map()); base.order.push(sel); }
+        const target = base.selectors.get(sel);
+        const src = add.selectors.get(sel);
+        for (const [k, v] of src) target.set(k, v); // 后者覆盖前者
+      }
+      // merge raw
+      base.raw.push(...add.raw);
+      // merge medias by mediaText
+      const grouped = new Map();
+      for (const m of base.medias) {
+        grouped.set(m.mediaText, m);
+      }
+      for (const m of add.medias) {
+        if (grouped.has(m.mediaText)) {
+          mergeScopes(grouped.get(m.mediaText).inner, m.inner);
+        } else {
+          base.medias.push({ mediaText: m.mediaText, inner: m.inner });
+          grouped.set(m.mediaText, base.medias[base.medias.length - 1]);
+        }
+      }
+      return base;
+    }
+    // ========== 纯文本 CSS 回退优化器（避免 CSSOM 破坏 var(...)） ==========
+
+// 简单去注释（/* ... */ 与 //...，不处理字符串内极端情况，但已足够 CSS）
+function stripCssComments(css) {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
+}
+
+// 解析一个 { ... } 声明块为 Map<prop, value>（后者覆盖前者）
+function parseDecls(declsText) {
+  const map = new Map();
+  const parts = declsText.split(";"); // 简单分割（CSS 内一般声明行末 ;）
+  for (let raw of parts) {
+    if (!raw) continue;
+    const idx = raw.indexOf(":");
+    if (idx === -1) continue;
+    const prop = raw.slice(0, idx).trim().toLowerCase();
+    const val = raw.slice(idx + 1).trim();
+    if (!prop) continue;
+    if (!val || val === "initial") continue; // 丢弃空值/initial
+    map.set(prop, val); // 后声明覆盖前声明
+  }
+  return map;
+}
+
+// 把 4 个方向合成短写
+function condenseBoxValues(v) {
+  const t=v.top, r=v.right, b=v.bottom, l=v.left;
+  if (t===r && r===b && b===l) return t;
+  if (t===b && r===l) return `${t} ${r}`;
+  if (r===l) return `${t} ${r} ${b}`;
+  return `${t} ${r} ${b} ${l}`;
+}
+
+// 对 Map 做 padding/margin/border 的短写合并
+function shorthandifyMap(map) {
+  const out = new Map(map);
+
+  const packBox = (base)=>{
+    const T=`${base}-top`, R=`${base}-right`, B=`${base}-bottom`, L=`${base}-left`;
+    if (out.has(T) && out.has(R) && out.has(B) && out.has(L)) {
+      const val = condenseBoxValues({
+        top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L)
+      });
+      out.delete(T); out.delete(R); out.delete(B); out.delete(L);
+      out.set(base, val);
+    }
+  };
+  packBox("padding");
+  packBox("margin");
+
+  // border：如果 4 边 width/style/color 全都有且分别相等 → 合成 border
+  const W=(s)=>`border-${s}-width`, S=(s)=>`border-${s}-style`, C=(s)=>`border-${s}-color`;
+  const sides=["top","right","bottom","left"];
+  const allSideHave = (gen)=>sides.every(sd=>out.has(gen(sd)));
+  const sideEqual = (gen)=>sides.every(sd=>out.get(gen(sd))===out.get(gen(sides[0])));
+  if (allSideHave(W) && allSideHave(S) && allSideHave(C) && sideEqual(W) && sideEqual(S) && sideEqual(C)) {
+    const bw=out.get(W("top")), bs=out.get(S("top")), bc=out.get(C("top"));
+    sides.forEach(sd=>{ out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd)); });
+    out.set("border", `${bw} ${bs} ${bc}`);
+  } else {
+    // 合并单边 border
+    for (const sd of sides) {
+      const w=out.get(W(sd)), s=out.get(S(sd)), c=out.get(C(sd));
+      if (w || s || c) {
+        const parts=[]; if (w) parts.push(w); if (s) parts.push(s); if (c) parts.push(c);
+        out.set(`border-${sd}`, parts.join(" "));
+        out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd));
+      }
+    }
+  }
+
+  // background-color -> background（若只有这个键）
+  const bgKeys = Array.from(out.keys()).filter(k=>k.startsWith("background-"));
+  if (out.has("background-color") && bgKeys.every(k=>k==="background-color")) {
+    out.set("background", out.get("background-color"));
+    out.delete("background-color");
+  }
+
+  return out;
+}
+
+// 解析整份 CSS（仅处理普通规则与 @media；其余 @font-face 等直接原文保留）
+function parseCssText(css) {
+  const scope = { rules: new Map(), order: [], medias: [], raw: [] }; // rules: selector -> Map
+  const text = stripCssComments(css);
+  const len = text.length;
+  let i = 0;
+
+  function skipWs() { while (i < len && /\s/.test(text[i])) i++; }
+
+  while (i < len) {
+    skipWs();
+    if (i >= len) break;
+
+    if (text[i] === "@") {
+      // 只解析 @media，其它 at-rule 原样保留
+      const atStart = i;
+      const atNameMatch = text.slice(i).match(/^@([a-zA-Z-]+)/);
+      if (!atNameMatch) { i++; continue; }
+      const atName = atNameMatch[1];
+      i += atName.length + 1;
+      skipWs();
+
+      if (atName.toLowerCase() === "media") {
+        // 读取 media 条件直到下一个 {
+        const braceIdx = text.indexOf("{", i);
+        if (braceIdx === -1) break;
+        const cond = text.slice(i, braceIdx).trim();
+        i = braceIdx + 1;
+
+        // 读取块内容（匹配大括号）
+        let depth = 1, start = i;
+        while (i < len && depth > 0) {
+          if (text[i] === "{") depth++;
+          else if (text[i] === "}") depth--;
+          i++;
+        }
+        const inner = text.slice(start, i - 1);
+
+        // 递归解析子内容
+        const innerScope = parseCssText(inner);
+
+        // 合并到同 mediaText
+        let m = scope.medias.find(x => x.cond === cond);
+        if (!m) { m = { cond, scope: { rules: new Map(), order: [], medias: [], raw: [] } }; scope.medias.push(m); }
+        // 合并规则
+        for (const sel of innerScope.order) {
+          const src = innerScope.rules.get(sel);
+          if (!m.scope.rules.has(sel)) { m.scope.rules.set(sel, new Map()); m.scope.order.push(sel); }
+          const dst = m.scope.rules.get(sel);
+          for (const [k,v] of src) dst.set(k,v);
+        }
+        // 合并子 media（多层 media 少见，这里直接追加）
+        for (const mm of innerScope.medias) {
+          let found = m.scope.medias.find(x => x.cond === mm.cond);
+          if (!found) { m.scope.medias.push(mm); }
+          else {
+            // 深层 media 合并（很少用到）
+            for (const sel of mm.scope.order) {
+              const src = mm.scope.rules.get(sel);
+              if (!found.scope.rules.has(sel)) { found.scope.rules.set(sel, new Map()); found.scope.order.push(sel); }
+              const dst = found.scope.rules.get(sel);
+              for (const [k,v] of src) dst.set(k,v);
+            }
+          }
+        }
+        // 原样追加 raw
+        m.scope.raw.push(...innerScope.raw);
+        continue;
+      } else {
+        // 其它 at-rule：读到分号或大括号块，原样放进去
+        // 尝试判断是否块状
+        skipWs();
+        if (text[i] === "{") {
+          let depth = 1, start = i+1;
+          i++;
+          while (i < len && depth > 0) {
+            if (text[i] === "{") depth++;
+            else if (text[i] === "}") depth--;
+            i++;
+          }
+          const body = text.slice(start, i - 1);
+          scope.raw.push(`@${atName} ${body ? `{${body}}` : "{}"}`);
+        } else {
+          const semi = text.indexOf(";", i);
+          const end = semi === -1 ? len : semi + 1;
+          scope.raw.push(text.slice(atStart, end).trim());
+          i = end;
+        }
+        continue;
+      }
+    }
+
+    // 普通选择器
+    const selStart = i;
+    const brace = text.indexOf("{", i);
+    if (brace === -1) break;
+    const selector = text.slice(selStart, brace).trim();
+    i = brace + 1;
+
+    // 找到匹配的 }
+    let depth = 1, start = i;
+    while (i < len && depth > 0) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") depth--;
+      i++;
+    }
+    const block = text.slice(start, i - 1);
+
+    // 解析声明并合并
+    const decls = parseDecls(block);
+    if (!scope.rules.has(selector)) { scope.rules.set(selector, new Map()); scope.order.push(selector); }
+    const dst = scope.rules.get(selector);
+    for (const [k,v] of decls) dst.set(k,v);
+  }
+
+  return scope;
+}
+
+// 把 scope 序列化回 CSS 文本（带短写合并）
+function stringifyScope(scope, indent = "") {
+  const out = [];
+
+  for (const sel of scope.order) {
+    const merged = shorthandifyMap(scope.rules.get(sel));
+    if (!merged || merged.size === 0) continue;
+    out.push(`${indent}${sel} {`);
+    for (const [prop, val] of merged) out.push(`${indent}  ${prop}: ${val};`);
+    out.push(`${indent}}`);
+  }
+
+  // 原样输出非规则块
+  for (const raw of scope.raw) out.push(indent + raw);
+
+  // 合并后的 @media
+  for (const m of scope.medias) {
+    out.push(`${indent}@media ${m.cond} {`);
+    out.push(stringifyScope(m.scope, indent + "  "));
+    out.push(`${indent}}`);
+  }
+
+  return out.join("\n");
+}
+
+  // 按 mediaText 合并同一层的 @media，并递归处理其子树
+function coalesceMedias(scope) {
+  if (!scope.medias || scope.medias.length === 0) return;
+
+  const firstIndex = new Map();          // 记录第一次出现的顺序
+  const grouped = new Map();             // mediaText -> inner scope（已合并）
+  const ordered = [];                    // 合并后的有序数组
+
+  for (const m of scope.medias) {
+    // 先递归合并子树
+    coalesceMedias(m.inner);
+
+    if (!grouped.has(m.mediaText)) {
+      grouped.set(m.mediaText, m.inner);
+      firstIndex.set(m.mediaText, ordered.length);
+      ordered.push({ mediaText: m.mediaText, inner: m.inner });
+    } else {
+      // 同 mediaText：把 m.inner 合并进已有的 inner
+      const base = grouped.get(m.mediaText);
+      mergeScopes(base, m.inner);        // 后者覆盖前者
+    }
+  }
+
+  scope.medias = ordered; // 替换为合并后的、保持首次出现顺序的数组
+}
+
+    function stringifyOptimized(scope, indent = "") {
+      const lines = [];
+      // 普通选择器（短写化）
+      for (const sel of scope.order) {
+        const merged = shorthandify(scope.selectors.get(sel));
+        if (!merged || merged.size === 0) continue;
+        lines.push(`${indent}${sel} {`);
+        for (const [prop, val] of merged) lines.push(`${indent}  ${prop}: ${val};`);
+        lines.push(`${indent}}`);
+      }
+      // 原始 at-rule 文本
+      for (const raw of scope.raw) lines.push(indent + raw);
+      // 媒体查询（已合并同 mediaText）
+      for (const m of scope.medias) {
+        lines.push(`${indent}@media ${m.mediaText} {`);
+        lines.push(stringifyOptimized(m.inner, indent + "  "));
+        lines.push(`${indent}}`);
+      }
+      return lines.join("\n");
+    }
+  
+    // 统一的 CSS 优化流程（优先 CSSO，失败或不可用则 CSSOM）
+    async function optimizeCssText(input, beautify = true, tabWidth = 2) {
+  let css;
+  try {
+    if (window.csso && typeof window.csso.minify === "function") {
+      // A. 有 CSSO：先压，再用文本解析做“可读短写”
+      const res = csso.minify(input, { restructure: true, comments: false, forceMediaMerge: true });
+      const scope = parseCssText(res.css);        // ← 用“文本解析器”而不是 CSSOM
+      css = stringifyScope(scope);
+    } else {
+      // B. 无 CSSO：
+      if (/\bvar\s*\(/i.test(input)) {
+        // 含 CSS 变量：用“文本解析器”避免 CSSOM 破坏
+        const scope = parseCssText(input);
+        css = stringifyScope(scope);
+      } else {
+        // 不含变量才考虑走 CSSOM（你也可以直接统一走文本解析器）
+        const scope = parseCssToScope(input);
+        coalesceMedias?.(scope);
+        css = stringifyOptimized(scope);
+      }
+    }
+
+    if (beautify) {
+      css = await prettier.format(css, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
+    }
+    return squeezeBlankLines(css);
+  } catch {
+    try {
+      // 兜底：文本解析器
+      const scope = parseCssText(input);
+      let out = stringifyScope(scope);
+      if (beautify) out = await prettier.format(out, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
+      return squeezeBlankLines(out);
+    } catch {
+      return "/* CSS 优化失败，原文返回 */\n" + input;
+    }
+  }
+}
+
+    // =============== 交互：普通格式化（含“CSS自动去重+短写”） ===============
+    async function doFormat() {
+      const input = document.getElementById("input").value;
+      const langSel = document.getElementById("language").value;
+      const tabWidth = parseInt(document.getElementById("tabWidth").value, 10) || 2;
+      const rmComments = document.getElementById("rmComments").checked;
+      const semi = document.getElementById("semi").checked;
+      const singleQuote = document.getElementById("singleQuote").checked;
+      const outputEl = document.getElementById("output");
+      if (!input.trim()) { outputEl.value = ""; return; }
+  
+      const parser = pickParser(langSel, input);
+  
+      // ★ 若是 CSS，默认自动：去重 + 短写 + 合并相同 @media
+      if (parser === "css") {
+        const css = await optimizeCssText(input, /*beautify*/ true, tabWidth);
+        const finalCss = rmComments ? removeComments(css, "css") : css; // 一般不需要，但保留逻辑
+        outputEl.value = finalCss;
+        return;
+      }
+  
+      // 其它语言：Prettier → 可选去注释 → 空行压缩
+      try {
+        let text = input;
+        if (parser) {
+          text = await prettier.format(text, {
+            parser, plugins: prettierPlugins, tabWidth, useTabs: false,
+            semi, singleQuote, trailingComma: "as-needed", bracketSpacing: true, printWidth: 90, proseWrap: "preserve",
+          });
+        }
+        if (rmComments) text = removeComments(text, parser || "plain");
+        text = squeezeBlankLines(text);
+        outputEl.value = text;
+      } catch (err) {
+        let text = input;
+        if (rmComments) text = removeComments(text, parser || "plain");
+        text = squeezeBlankLines(text);
+        outputEl.value = text + "\n\n/* 提示：Prettier 解析失败，已降级为空行压缩（与可选注释移除）。 */";
+      }
+    }
+  
+    // =============== 交互：按钮“CSS 去重/覆盖优化” ===============
+    async function optimizeCSS() {
+      const input = document.getElementById("input").value;
+      const tabWidth = parseInt(document.getElementById("tabWidth").value, 10) || 2;
+      const keepMinified = document.getElementById("cssMinified")?.checked;
+      const outputEl = document.getElementById("output");
+      if (!input.trim()) { outputEl.value = ""; return; }
+  
+      const css = await optimizeCssText(input, /*beautify*/ !keepMinified, tabWidth);
+      outputEl.value = css;
+    }
+  
+    // =============== 绑定事件（保持原有热键/复制等） ===============
+    document.getElementById("format").addEventListener("click", doFormat);
+    document.getElementById("optCss").addEventListener("click", optimizeCSS);
+  
+    document.getElementById("copy").addEventListener("click", async () => {
+      const v = document.getElementById("output").value;
+      if (!v) return;
+      try {
+        await navigator.clipboard.writeText(v);
+        const btn = document.getElementById("copy");
+        const old = btn.textContent;
+        btn.textContent = "已复制";
+        setTimeout(() => (btn.textContent = old), 1200);
+      } catch {
+        const ta = document.getElementById("output");
+        ta.focus(); ta.select();
+        document.execCommand("copy");
+      }
+    });
+  
+    window.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        doFormat();
+      }
+    });
+  </script>
+  
+</body>
+
+</html>
