@@ -211,6 +211,8 @@
   <script src="https://unpkg.com/prettier@3.3.3/plugins/postcss.js"></script>
   <script src="https://unpkg.com/prettier@3.3.3/plugins/markdown.js"></script>
   <script src="https://unpkg.com/prettier@3.3.3/plugins/yaml.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/angular.js"></script>
+  <script src="https://unpkg.com/prettier@3.3.3/plugins/vue.js"></script>
 
   <!-- CSSO：可选（存在则优先使用），若加载失败将自动回退到内置 CSSOM 去重器 -->
   <script src="https://unpkg.com/csso@5.0.5/dist/csso.min.js"></script>
@@ -304,12 +306,12 @@
       if (/[{;]\s*[a-z-]+\s*:\s*[^;]+;/.test(s)) return "css"; // 粗略识别 css 片段
       return "babel";
     }
-  
+
     function squeezeBlankLines(code) {
       if (!code) return code;
       return code.replace(/\s+$/gm, "").replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
     }
-  
+
     // =============== JS 注释移除（增强版） ===============
     // 近似词法器：处理字符串/模板字符串/正则/转义，尽量不误删
     function stripJsComments(input) {
@@ -324,25 +326,25 @@
         const ch = t[t.length - 1];
         return !ch || "({[=:+!&|?,;*%^~<>".includes(ch);
       };
-  
+
       while (i < input.length) {
         c = input[i];
         next = input[i + 1];
-  
+
         // 结束行注释
         if (inLine) {
           if (c === "\n") { inLine = false; out += c; }
           i++;
           continue;
         }
-  
+
         // 结束块注释
         if (inBlock) {
           if (c === "*" && next === "/") { inBlock = false; i += 2; continue; }
           i++;
           continue;
         }
-  
+
         // 字符串/模板字符串
         if (inS) { // 单引号
           out += c;
@@ -367,7 +369,7 @@
           i++;
           continue;
         }
-  
+
         // 正则字面量
         if (inRegex) {
           out += c;
@@ -383,7 +385,7 @@
           i++;
           continue;
         }
-  
+
         // 可能进入注释/正则/字符串
         if (c === "/") {
           if (next === "/") { inLine = true; i += 2; continue; }
@@ -396,63 +398,80 @@
         if (c === "'") { inS = true; out += c; i++; esc = false; continue; }
         if (c === '"') { inD = true; out += c; i++; esc = false; continue; }
         if (c === "`") { inT = true; out += c; i++; esc = false; continue; }
-  
+
         out += c;
         i++;
       }
       return out;
     }
-  
+    function stripHtmlCommentsDom(html) {
+      // 保存 doctype（DOMParser 取不回原样）
+      const hasDoctype = /^\s*<!doctype\s+html[^>]*>/i.test(html);
+      const doc = new DOMParser().parseFromString(html, "text/html");
+
+      // 删除所有注释节点（如果你想保留 IE 条件注释，可在这里加判断 /^!|\[if /i）
+      const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT, null, false);
+      const toRemove = [];
+      while (walker.nextNode()) toRemove.push(walker.currentNode);
+      for (const n of toRemove) n.parentNode && n.parentNode.removeChild(n);
+
+      const serialized = doc.documentElement.outerHTML;
+      return (hasDoctype ? "<!doctype html>\n" : "") + serialized;
+    }
     function removeComments(code, parser) {
       if (!code) return code;
+      if (parser === "html") {
+        // 用 DOM 方式删注释（更稳，避免正则误删/漏删）
+        return stripHtmlCommentsDom(code);
+      }
       if (parser === "babel" || parser === "typescript") return stripJsComments(code);
+
+      // 其它语言：沿用之前的做法
       const stripC = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
       const stripHash = (src) => src.replace(/(^|\s)#(?!\!)[^\n\r]*/g, "$1");
-      const stripHTML = (src) => src.replace(/<!--([\s\S]*?)-->/g, "");
-      if (parser === "html" || /<\w|\s<!DOCTYPE/i.test(code)) return stripHTML(code);
       if (parser === "yaml" || parser === "markdown") return stripHash(code);
       if (parser === "json") return code;
       let out = stripC(code);
       out = stripHash(out);
       return out;
     }
-  
+
     // =============== CSS 去重 + 短写 + 合并相同 @media ===============
     // —— 工具：四方向合并为短写 —— //
     function condenseBox(v) {
-      const t=v.top, r=v.right, b=v.bottom, l=v.left;
-      if (t===r && r===b && b===l) return t;
-      if (t===b && r===l) return `${t} ${r}`;
-      if (r===l) return `${t} ${r} ${b}`;
+      const t = v.top, r = v.right, b = v.bottom, l = v.left;
+      if (t === r && r === b && b === l) return t;
+      if (t === b && r === l) return `${t} ${r}`;
+      if (r === l) return `${t} ${r} ${b}`;
       return `${t} ${r} ${b} ${l}`;
     }
-  
+
     // 将 longhand 合成 shorthand，并去掉 'initial'
     function shorthandify(declMap) {
       const out = new Map(declMap);
-  
+
       // 去 initial
-      for (const [k,v] of Array.from(out)) {
-        if (typeof v==='string' && v.trim()==='initial') out.delete(k);
+      for (const [k, v] of Array.from(out)) {
+        if (typeof v === 'string' && v.trim() === 'initial') out.delete(k);
       }
-  
+
       // padding / margin
-      const packBox = (base)=>{
-        const T=`${base}-top`, R=`${base}-right`, B=`${base}-bottom`, L=`${base}-left`;
+      const packBox = (base) => {
+        const T = `${base}-top`, R = `${base}-right`, B = `${base}-bottom`, L = `${base}-left`;
         if (out.has(T) && out.has(R) && out.has(B) && out.has(L)) {
-          const val = condenseBox({top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L)});
+          const val = condenseBox({ top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L) });
           out.delete(T); out.delete(R); out.delete(B); out.delete(L);
           out.set(base, val);
         }
       };
       packBox('padding');
       packBox('margin');
-  
+
       // border 合并
-      const W=(s)=>`border-${s}-width`, S=(s)=>`border-${s}-style`, C=(s)=>`border-${s}-color`;
-      const sides=['top','right','bottom','left'];
-      const allSideHave = (gen)=>sides.every(side => out.has(gen(side)));
-      const sideEqual = (gen)=>sides.every(side => out.get(gen(side))===out.get(gen(sides[0])));
+      const W = (s) => `border-${s}-width`, S = (s) => `border-${s}-style`, C = (s) => `border-${s}-color`;
+      const sides = ['top', 'right', 'bottom', 'left'];
+      const allSideHave = (gen) => sides.every(side => out.has(gen(side)));
+      const sideEqual = (gen) => sides.every(side => out.get(gen(side)) === out.get(gen(sides[0])));
       if (allSideHave(W) && allSideHave(S) && allSideHave(C) && sideEqual(W) && sideEqual(S) && sideEqual(C)) {
         const bw = out.get(W('top')), bs = out.get(S('top')), bc = out.get(C('top'));
         sides.forEach(side => { out.delete(W(side)); out.delete(S(side)); out.delete(C(side)); });
@@ -470,17 +489,17 @@
           }
         }
       }
-  
+
       // background-color -> background（若只有颜色）
-      const bgKeys = Array.from(out.keys()).filter(k=>k.startsWith('background-'));
-      if (out.has('background-color') && bgKeys.every(k=>k==='background-color')) {
+      const bgKeys = Array.from(out.keys()).filter(k => k.startsWith('background-'));
+      if (out.has('background-color') && bgKeys.every(k => k === 'background-color')) {
         out.set('background', out.get('background-color'));
         out.delete('background-color');
       }
-  
+
       return out;
     }
-  
+
     // 把 CSS 解析进离屏文档 → 合并同选择器、同 media
     function parseCssToScope(cssText) {
       const offdoc = document.implementation.createHTMLDocument("");
@@ -488,7 +507,7 @@
       style.textContent = cssText;
       offdoc.head.append(style);
       const sheet = style.sheet;
-  
+
       function visit(ruleList) {
         const scope = { selectors: new Map(), order: [], medias: [], raw: [] };
         for (let i = 0; i < ruleList.length; i++) {
@@ -514,7 +533,7 @@
       }
       return visit(sheet.cssRules);
     }
-  
+
     // 合并两个 scope（后者覆盖前者）
     function mergeScopes(base, add) {
       // merge selectors
@@ -543,255 +562,364 @@
     }
     // ========== 纯文本 CSS 回退优化器（避免 CSSOM 破坏 var(...)） ==========
 
-// 简单去注释（/* ... */ 与 //...，不处理字符串内极端情况，但已足够 CSS）
-function stripCssComments(css) {
-  return css
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
-}
-
-// 解析一个 { ... } 声明块为 Map<prop, value>（后者覆盖前者）
-function parseDecls(declsText) {
-  const map = new Map();
-  const parts = declsText.split(";"); // 简单分割（CSS 内一般声明行末 ;）
-  for (let raw of parts) {
-    if (!raw) continue;
-    const idx = raw.indexOf(":");
-    if (idx === -1) continue;
-    const prop = raw.slice(0, idx).trim().toLowerCase();
-    const val = raw.slice(idx + 1).trim();
-    if (!prop) continue;
-    if (!val || val === "initial") continue; // 丢弃空值/initial
-    map.set(prop, val); // 后声明覆盖前声明
-  }
-  return map;
-}
-
-// 把 4 个方向合成短写
-function condenseBoxValues(v) {
-  const t=v.top, r=v.right, b=v.bottom, l=v.left;
-  if (t===r && r===b && b===l) return t;
-  if (t===b && r===l) return `${t} ${r}`;
-  if (r===l) return `${t} ${r} ${b}`;
-  return `${t} ${r} ${b} ${l}`;
-}
-
-// 对 Map 做 padding/margin/border 的短写合并
-function shorthandifyMap(map) {
-  const out = new Map(map);
-
-  const packBox = (base)=>{
-    const T=`${base}-top`, R=`${base}-right`, B=`${base}-bottom`, L=`${base}-left`;
-    if (out.has(T) && out.has(R) && out.has(B) && out.has(L)) {
-      const val = condenseBoxValues({
-        top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L)
-      });
-      out.delete(T); out.delete(R); out.delete(B); out.delete(L);
-      out.set(base, val);
+    // 简单去注释（/* ... */ 与 //...，不处理字符串内极端情况，但已足够 CSS）
+    function stripCssComments(css) {
+      return css
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
     }
-  };
-  packBox("padding");
-  packBox("margin");
 
-  // border：如果 4 边 width/style/color 全都有且分别相等 → 合成 border
-  const W=(s)=>`border-${s}-width`, S=(s)=>`border-${s}-style`, C=(s)=>`border-${s}-color`;
-  const sides=["top","right","bottom","left"];
-  const allSideHave = (gen)=>sides.every(sd=>out.has(gen(sd)));
-  const sideEqual = (gen)=>sides.every(sd=>out.get(gen(sd))===out.get(gen(sides[0])));
-  if (allSideHave(W) && allSideHave(S) && allSideHave(C) && sideEqual(W) && sideEqual(S) && sideEqual(C)) {
-    const bw=out.get(W("top")), bs=out.get(S("top")), bc=out.get(C("top"));
-    sides.forEach(sd=>{ out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd)); });
-    out.set("border", `${bw} ${bs} ${bc}`);
-  } else {
-    // 合并单边 border
-    for (const sd of sides) {
-      const w=out.get(W(sd)), s=out.get(S(sd)), c=out.get(C(sd));
-      if (w || s || c) {
-        const parts=[]; if (w) parts.push(w); if (s) parts.push(s); if (c) parts.push(c);
-        out.set(`border-${sd}`, parts.join(" "));
-        out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd));
+    // 解析一个 { ... } 声明块为 Map<prop, value>（后者覆盖前者）
+    function parseDecls(declsText) {
+      const map = new Map();
+      const parts = declsText.split(";"); // 简单分割（CSS 内一般声明行末 ;）
+      for (let raw of parts) {
+        if (!raw) continue;
+        const idx = raw.indexOf(":");
+        if (idx === -1) continue;
+        const prop = raw.slice(0, idx).trim().toLowerCase();
+        const val = raw.slice(idx + 1).trim();
+        if (!prop) continue;
+        if (!val || val === "initial") continue; // 丢弃空值/initial
+        map.set(prop, val); // 后声明覆盖前声明
+      }
+      return map;
+    }
+
+    // 把 4 个方向合成短写
+    function condenseBoxValues(v) {
+      const t = v.top, r = v.right, b = v.bottom, l = v.left;
+      if (t === r && r === b && b === l) return t;
+      if (t === b && r === l) return `${t} ${r}`;
+      if (r === l) return `${t} ${r} ${b}`;
+      return `${t} ${r} ${b} ${l}`;
+    }
+
+    // 对 Map 做 padding/margin/border 的短写合并
+    function shorthandifyMap(map) {
+      const out = new Map(map);
+
+      const packBox = (base) => {
+        const T = `${base}-top`, R = `${base}-right`, B = `${base}-bottom`, L = `${base}-left`;
+        if (out.has(T) && out.has(R) && out.has(B) && out.has(L)) {
+          const val = condenseBoxValues({
+            top: out.get(T), right: out.get(R), bottom: out.get(B), left: out.get(L)
+          });
+          out.delete(T); out.delete(R); out.delete(B); out.delete(L);
+          out.set(base, val);
+        }
+      };
+      packBox("padding");
+      packBox("margin");
+
+      // border：如果 4 边 width/style/color 全都有且分别相等 → 合成 border
+      const W = (s) => `border-${s}-width`, S = (s) => `border-${s}-style`, C = (s) => `border-${s}-color`;
+      const sides = ["top", "right", "bottom", "left"];
+      const allSideHave = (gen) => sides.every(sd => out.has(gen(sd)));
+      const sideEqual = (gen) => sides.every(sd => out.get(gen(sd)) === out.get(gen(sides[0])));
+      if (allSideHave(W) && allSideHave(S) && allSideHave(C) && sideEqual(W) && sideEqual(S) && sideEqual(C)) {
+        const bw = out.get(W("top")), bs = out.get(S("top")), bc = out.get(C("top"));
+        sides.forEach(sd => { out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd)); });
+        out.set("border", `${bw} ${bs} ${bc}`);
+      } else {
+        // 合并单边 border
+        for (const sd of sides) {
+          const w = out.get(W(sd)), s = out.get(S(sd)), c = out.get(C(sd));
+          if (w || s || c) {
+            const parts = []; if (w) parts.push(w); if (s) parts.push(s); if (c) parts.push(c);
+            out.set(`border-${sd}`, parts.join(" "));
+            out.delete(W(sd)); out.delete(S(sd)); out.delete(C(sd));
+          }
+        }
+      }
+
+      // background-color -> background（若只有这个键）
+      const bgKeys = Array.from(out.keys()).filter(k => k.startsWith("background-"));
+      if (out.has("background-color") && bgKeys.every(k => k === "background-color")) {
+        out.set("background", out.get("background-color"));
+        out.delete("background-color");
+      }
+
+      return out;
+    }
+// 判断 <script> 是否 JS（可执行脚本），跳过 JSON-LD 等
+  function isJsScriptNode(node) {
+  const t = (node.getAttribute("type") || "").trim().toLowerCase();
+  if (!t) return true; // 没写 type 默认 JS
+  if (t === "module") return true;
+  if (/^(text|application)\/(javascript|ecmascript)$/.test(t)) return true;
+  // 明确不是 JS 的类型（如 JSON-LD）
+  if (t === "application/ld+json" || t === "application/json") return false;
+  return false;
+}
+function isCssStyleNode(node) {
+  const t = (node.getAttribute("type") || "").trim().toLowerCase();
+  return !t || t === "text/css";
+}
+
+// 对 HTML 文档对象：可选删除 HTML 注释 + 分别处理内联 CSS / JS
+async function processInlineAssets(doc, { rmComments = false, tabWidth = 2 }) {
+  // 1) 删除 HTML 注释（DOM 级）
+  if (rmComments) {
+    const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT, null, false);
+    const toRemove = [];
+    while (walker.nextNode()) toRemove.push(walker.currentNode);
+    for (const n of toRemove) n.parentNode && n.parentNode.removeChild(n);
+  }
+
+  // 2) <style>：每个块独立 try/catch，不拖累全局
+  const styles = Array.from(doc.querySelectorAll("style"));
+  for (const s of styles) {
+    if (!isCssStyleNode(s)) continue;
+    const raw = s.textContent || "";
+    if (!raw.trim()) continue;
+    try {
+      // 先去注释再优化（更稳定）
+      const css0 = rmComments ? removeComments(raw, "css") : raw;
+      const pretty = await optimizeCssText(css0, /*beautify*/ true, tabWidth);
+      s.textContent = pretty;
+    } catch (e) {
+      // 降级：仅去注释（若选中）+ 空行压缩
+      let css = rmComments ? removeComments(raw, "css") : raw;
+      s.textContent = squeezeBlankLines(css);
+    }
+  }
+
+  // 3) <script>：区分 JSON/JSON-LD 与 JS
+  const scripts = Array.from(doc.querySelectorAll("script"));
+  for (const sc of scripts) {
+    const raw = sc.textContent || "";
+    if (!raw.trim()) continue;
+
+    const t = (sc.getAttribute("type") || "").trim().toLowerCase();
+    // JSON / JSON-LD：不能有注释；格式化为漂亮的 JSON
+    if (t === "application/ld+json" || t === "application/json") {
+      try {
+        const obj = JSON.parse(raw);
+        sc.textContent = JSON.stringify(obj, null, tabWidth);
+      } catch {
+        // 解析失败：不要乱删，原样压空行即可
+        sc.textContent = squeezeBlankLines(raw);
+      }
+      continue;
+    }
+
+    // JS：先去注释（更宽容），再尝试 Prettier
+    if (isJsScriptNode(sc)) {
+      try {
+        let code = rmComments ? stripJsComments(raw) : raw;
+        // 用 Prettier 美化 JS（babel 解析器对大多数场景够用）
+        code = await prettier.format(code, {
+          parser: "babel",
+          plugins: prettierPlugins,
+          tabWidth,
+          semi: true,
+          singleQuote: false,
+          trailingComma: "es5",
+          printWidth: 90,
+        });
+        sc.textContent = code;
+      } catch (e) {
+        // 降级：只做注释去除（如果勾选）+ 空行压缩
+        let code = rmComments ? stripJsComments(raw) : raw;
+        sc.textContent = squeezeBlankLines(code);
       }
     }
   }
-
-  // background-color -> background（若只有这个键）
-  const bgKeys = Array.from(out.keys()).filter(k=>k.startsWith("background-"));
-  if (out.has("background-color") && bgKeys.every(k=>k==="background-color")) {
-    out.set("background", out.get("background-color"));
-    out.delete("background-color");
-  }
-
-  return out;
 }
 
-// 解析整份 CSS（仅处理普通规则与 @media；其余 @font-face 等直接原文保留）
-function parseCssText(css) {
-  const scope = { rules: new Map(), order: [], medias: [], raw: [] }; // rules: selector -> Map
-  const text = stripCssComments(css);
-  const len = text.length;
-  let i = 0;
+    // 解析整份 CSS（仅处理普通规则与 @media；其余 @font-face 等直接原文保留）
+    function parseCssText(css) {
+      const scope = { rules: new Map(), order: [], medias: [], raw: [] }; // rules: selector -> Map
+      const text = stripCssComments(css);
+      const len = text.length;
+      let i = 0;
 
-  function skipWs() { while (i < len && /\s/.test(text[i])) i++; }
+      function skipWs() { while (i < len && /\s/.test(text[i])) i++; }
 
-  while (i < len) {
-    skipWs();
-    if (i >= len) break;
+      while (i < len) {
+        skipWs();
+        if (i >= len) break;
 
-    if (text[i] === "@") {
-      // 只解析 @media，其它 at-rule 原样保留
-      const atStart = i;
-      const atNameMatch = text.slice(i).match(/^@([a-zA-Z-]+)/);
-      if (!atNameMatch) { i++; continue; }
-      const atName = atNameMatch[1];
-      i += atName.length + 1;
-      skipWs();
+        if (text[i] === "@") {
+          // 只解析 @media，其它 at-rule 原样保留
+          const atStart = i;
+          const atNameMatch = text.slice(i).match(/^@([a-zA-Z-]+)/);
+          if (!atNameMatch) { i++; continue; }
+          const atName = atNameMatch[1];
+          i += atName.length + 1;
+          skipWs();
 
-      if (atName.toLowerCase() === "media") {
-        // 读取 media 条件直到下一个 {
-        const braceIdx = text.indexOf("{", i);
-        if (braceIdx === -1) break;
-        const cond = text.slice(i, braceIdx).trim();
-        i = braceIdx + 1;
+          if (atName.toLowerCase() === "media") {
+            // 读取 media 条件直到下一个 {
+            const braceIdx = text.indexOf("{", i);
+            if (braceIdx === -1) break;
+            const cond = text.slice(i, braceIdx).trim();
+            i = braceIdx + 1;
 
-        // 读取块内容（匹配大括号）
+            // 读取块内容（匹配大括号）
+            let depth = 1, start = i;
+            while (i < len && depth > 0) {
+              if (text[i] === "{") depth++;
+              else if (text[i] === "}") depth--;
+              i++;
+            }
+            const inner = text.slice(start, i - 1);
+
+            // 递归解析子内容
+            const innerScope = parseCssText(inner);
+
+            // 合并到同 mediaText
+            let m = scope.medias.find(x => x.cond === cond);
+            if (!m) { m = { cond, scope: { rules: new Map(), order: [], medias: [], raw: [] } }; scope.medias.push(m); }
+            // 合并规则
+            for (const sel of innerScope.order) {
+              const src = innerScope.rules.get(sel);
+              if (!m.scope.rules.has(sel)) { m.scope.rules.set(sel, new Map()); m.scope.order.push(sel); }
+              const dst = m.scope.rules.get(sel);
+              for (const [k, v] of src) dst.set(k, v);
+            }
+            // 合并子 media（多层 media 少见，这里直接追加）
+            for (const mm of innerScope.medias) {
+              let found = m.scope.medias.find(x => x.cond === mm.cond);
+              if (!found) { m.scope.medias.push(mm); }
+              else {
+                // 深层 media 合并（很少用到）
+                for (const sel of mm.scope.order) {
+                  const src = mm.scope.rules.get(sel);
+                  if (!found.scope.rules.has(sel)) { found.scope.rules.set(sel, new Map()); found.scope.order.push(sel); }
+                  const dst = found.scope.rules.get(sel);
+                  for (const [k, v] of src) dst.set(k, v);
+                }
+              }
+            }
+            // 原样追加 raw
+            m.scope.raw.push(...innerScope.raw);
+            continue;
+          } else {
+            // 其它 at-rule：读到分号或大括号块，原样放进去
+            // 尝试判断是否块状
+            skipWs();
+            if (text[i] === "{") {
+              let depth = 1, start = i + 1;
+              i++;
+              while (i < len && depth > 0) {
+                if (text[i] === "{") depth++;
+                else if (text[i] === "}") depth--;
+                i++;
+              }
+              const body = text.slice(start, i - 1);
+              scope.raw.push(`@${atName} ${body ? `{${body}}` : "{}"}`);
+            } else {
+              const semi = text.indexOf(";", i);
+              const end = semi === -1 ? len : semi + 1;
+              scope.raw.push(text.slice(atStart, end).trim());
+              i = end;
+            }
+            continue;
+          }
+        }
+
+        // 普通选择器
+        const selStart = i;
+        const brace = text.indexOf("{", i);
+        if (brace === -1) break;
+        const selector = text.slice(selStart, brace).trim();
+        i = brace + 1;
+
+        // 找到匹配的 }
         let depth = 1, start = i;
         while (i < len && depth > 0) {
           if (text[i] === "{") depth++;
           else if (text[i] === "}") depth--;
           i++;
         }
-        const inner = text.slice(start, i - 1);
+        const block = text.slice(start, i - 1);
 
-        // 递归解析子内容
-        const innerScope = parseCssText(inner);
-
-        // 合并到同 mediaText
-        let m = scope.medias.find(x => x.cond === cond);
-        if (!m) { m = { cond, scope: { rules: new Map(), order: [], medias: [], raw: [] } }; scope.medias.push(m); }
-        // 合并规则
-        for (const sel of innerScope.order) {
-          const src = innerScope.rules.get(sel);
-          if (!m.scope.rules.has(sel)) { m.scope.rules.set(sel, new Map()); m.scope.order.push(sel); }
-          const dst = m.scope.rules.get(sel);
-          for (const [k,v] of src) dst.set(k,v);
-        }
-        // 合并子 media（多层 media 少见，这里直接追加）
-        for (const mm of innerScope.medias) {
-          let found = m.scope.medias.find(x => x.cond === mm.cond);
-          if (!found) { m.scope.medias.push(mm); }
-          else {
-            // 深层 media 合并（很少用到）
-            for (const sel of mm.scope.order) {
-              const src = mm.scope.rules.get(sel);
-              if (!found.scope.rules.has(sel)) { found.scope.rules.set(sel, new Map()); found.scope.order.push(sel); }
-              const dst = found.scope.rules.get(sel);
-              for (const [k,v] of src) dst.set(k,v);
-            }
-          }
-        }
-        // 原样追加 raw
-        m.scope.raw.push(...innerScope.raw);
-        continue;
-      } else {
-        // 其它 at-rule：读到分号或大括号块，原样放进去
-        // 尝试判断是否块状
-        skipWs();
-        if (text[i] === "{") {
-          let depth = 1, start = i+1;
-          i++;
-          while (i < len && depth > 0) {
-            if (text[i] === "{") depth++;
-            else if (text[i] === "}") depth--;
-            i++;
-          }
-          const body = text.slice(start, i - 1);
-          scope.raw.push(`@${atName} ${body ? `{${body}}` : "{}"}`);
-        } else {
-          const semi = text.indexOf(";", i);
-          const end = semi === -1 ? len : semi + 1;
-          scope.raw.push(text.slice(atStart, end).trim());
-          i = end;
-        }
-        continue;
+        // 解析声明并合并
+        const decls = parseDecls(block);
+        if (!scope.rules.has(selector)) { scope.rules.set(selector, new Map()); scope.order.push(selector); }
+        const dst = scope.rules.get(selector);
+        for (const [k, v] of decls) dst.set(k, v);
       }
+
+      return scope;
     }
+    async function formatHtmlRobust(input, { tabWidth = 2, rmComments = false }) {
+  // 1) DOM 解析（会自动修复不规范结构）
+  const doc = new DOMParser().parseFromString(input, "text/html");
 
-    // 普通选择器
-    const selStart = i;
-    const brace = text.indexOf("{", i);
-    if (brace === -1) break;
-    const selector = text.slice(selStart, brace).trim();
-    i = brace + 1;
+  // 2) 逐块处理：删 HTML 注释 + 内联 CSS/JS
+  await processInlineAssets(doc, { rmComments, tabWidth });
 
-    // 找到匹配的 }
-    let depth = 1, start = i;
-    while (i < len && depth > 0) {
-      if (text[i] === "{") depth++;
-      else if (text[i] === "}") depth--;
-      i++;
-    }
-    const block = text.slice(start, i - 1);
+  // 3) 序列化回标准 HTML
+  let out = "<!doctype html>\n" + doc.documentElement.outerHTML;
 
-    // 解析声明并合并
-    const decls = parseDecls(block);
-    if (!scope.rules.has(selector)) { scope.rules.set(selector, new Map()); scope.order.push(selector); }
-    const dst = scope.rules.get(selector);
-    for (const [k,v] of decls) dst.set(k,v);
+  // 4) 最后再交给 Prettier 的 HTML 解析器做统一排版（失败就返回 DOM 版）
+  try {
+    out = await prettier.format(out, {
+      parser: "html",
+      plugins: prettierPlugins,
+      tabWidth,
+      printWidth: 90,
+      proseWrap: "preserve",
+    });
+  } catch {
+    // ignore
   }
-
-  return scope;
+  return out;
 }
 
-// 把 scope 序列化回 CSS 文本（带短写合并）
-function stringifyScope(scope, indent = "") {
-  const out = [];
+    // 把 scope 序列化回 CSS 文本（带短写合并）
+    function stringifyScope(scope, indent = "") {
+      const out = [];
 
-  for (const sel of scope.order) {
-    const merged = shorthandifyMap(scope.rules.get(sel));
-    if (!merged || merged.size === 0) continue;
-    out.push(`${indent}${sel} {`);
-    for (const [prop, val] of merged) out.push(`${indent}  ${prop}: ${val};`);
-    out.push(`${indent}}`);
-  }
+      for (const sel of scope.order) {
+        const merged = shorthandifyMap(scope.rules.get(sel));
+        if (!merged || merged.size === 0) continue;
+        out.push(`${indent}${sel} {`);
+        for (const [prop, val] of merged) out.push(`${indent}  ${prop}: ${val};`);
+        out.push(`${indent}}`);
+      }
 
-  // 原样输出非规则块
-  for (const raw of scope.raw) out.push(indent + raw);
+      // 原样输出非规则块
+      for (const raw of scope.raw) out.push(indent + raw);
 
-  // 合并后的 @media
-  for (const m of scope.medias) {
-    out.push(`${indent}@media ${m.cond} {`);
-    out.push(stringifyScope(m.scope, indent + "  "));
-    out.push(`${indent}}`);
-  }
+      // 合并后的 @media
+      for (const m of scope.medias) {
+        out.push(`${indent}@media ${m.cond} {`);
+        out.push(stringifyScope(m.scope, indent + "  "));
+        out.push(`${indent}}`);
+      }
 
-  return out.join("\n");
-}
-
-  // 按 mediaText 合并同一层的 @media，并递归处理其子树
-function coalesceMedias(scope) {
-  if (!scope.medias || scope.medias.length === 0) return;
-
-  const firstIndex = new Map();          // 记录第一次出现的顺序
-  const grouped = new Map();             // mediaText -> inner scope（已合并）
-  const ordered = [];                    // 合并后的有序数组
-
-  for (const m of scope.medias) {
-    // 先递归合并子树
-    coalesceMedias(m.inner);
-
-    if (!grouped.has(m.mediaText)) {
-      grouped.set(m.mediaText, m.inner);
-      firstIndex.set(m.mediaText, ordered.length);
-      ordered.push({ mediaText: m.mediaText, inner: m.inner });
-    } else {
-      // 同 mediaText：把 m.inner 合并进已有的 inner
-      const base = grouped.get(m.mediaText);
-      mergeScopes(base, m.inner);        // 后者覆盖前者
+      return out.join("\n");
     }
-  }
 
-  scope.medias = ordered; // 替换为合并后的、保持首次出现顺序的数组
-}
+    // 按 mediaText 合并同一层的 @media，并递归处理其子树
+    function coalesceMedias(scope) {
+      if (!scope.medias || scope.medias.length === 0) return;
+
+      const firstIndex = new Map();          // 记录第一次出现的顺序
+      const grouped = new Map();             // mediaText -> inner scope（已合并）
+      const ordered = [];                    // 合并后的有序数组
+
+      for (const m of scope.medias) {
+        // 先递归合并子树
+        coalesceMedias(m.inner);
+
+        if (!grouped.has(m.mediaText)) {
+          grouped.set(m.mediaText, m.inner);
+          firstIndex.set(m.mediaText, ordered.length);
+          ordered.push({ mediaText: m.mediaText, inner: m.inner });
+        } else {
+          // 同 mediaText：把 m.inner 合并进已有的 inner
+          const base = grouped.get(m.mediaText);
+          mergeScopes(base, m.inner);        // 后者覆盖前者
+        }
+      }
+
+      scope.medias = ordered; // 替换为合并后的、保持首次出现顺序的数组
+    }
 
     function stringifyOptimized(scope, indent = "") {
       const lines = [];
@@ -813,46 +941,46 @@ function coalesceMedias(scope) {
       }
       return lines.join("\n");
     }
-  
+
     // 统一的 CSS 优化流程（优先 CSSO，失败或不可用则 CSSOM）
     async function optimizeCssText(input, beautify = true, tabWidth = 2) {
-  let css;
-  try {
-    if (window.csso && typeof window.csso.minify === "function") {
-      // A. 有 CSSO：先压，再用文本解析做“可读短写”
-      const res = csso.minify(input, { restructure: true, comments: false, forceMediaMerge: true });
-      const scope = parseCssText(res.css);        // ← 用“文本解析器”而不是 CSSOM
-      css = stringifyScope(scope);
-    } else {
-      // B. 无 CSSO：
-      if (/\bvar\s*\(/i.test(input)) {
-        // 含 CSS 变量：用“文本解析器”避免 CSSOM 破坏
-        const scope = parseCssText(input);
-        css = stringifyScope(scope);
-      } else {
-        // 不含变量才考虑走 CSSOM（你也可以直接统一走文本解析器）
-        const scope = parseCssToScope(input);
-        coalesceMedias?.(scope);
-        css = stringifyOptimized(scope);
+      let css;
+      try {
+        if (window.csso && typeof window.csso.minify === "function") {
+          // A. 有 CSSO：先压，再用文本解析做“可读短写”
+          const res = csso.minify(input, { restructure: true, comments: false, forceMediaMerge: true });
+          const scope = parseCssText(res.css);        // ← 用“文本解析器”而不是 CSSOM
+          css = stringifyScope(scope);
+        } else {
+          // B. 无 CSSO：
+          if (/\bvar\s*\(/i.test(input)) {
+            // 含 CSS 变量：用“文本解析器”避免 CSSOM 破坏
+            const scope = parseCssText(input);
+            css = stringifyScope(scope);
+          } else {
+            // 不含变量才考虑走 CSSOM（你也可以直接统一走文本解析器）
+            const scope = parseCssToScope(input);
+            coalesceMedias?.(scope);
+            css = stringifyOptimized(scope);
+          }
+        }
+
+        if (beautify) {
+          css = await prettier.format(css, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
+        }
+        return squeezeBlankLines(css);
+      } catch {
+        try {
+          // 兜底：文本解析器
+          const scope = parseCssText(input);
+          let out = stringifyScope(scope);
+          if (beautify) out = await prettier.format(out, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
+          return squeezeBlankLines(out);
+        } catch {
+          return "/* CSS 优化失败，原文返回 */\n" + input;
+        }
       }
     }
-
-    if (beautify) {
-      css = await prettier.format(css, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
-    }
-    return squeezeBlankLines(css);
-  } catch {
-    try {
-      // 兜底：文本解析器
-      const scope = parseCssText(input);
-      let out = stringifyScope(scope);
-      if (beautify) out = await prettier.format(out, { parser: "css", plugins: prettierPlugins, tabWidth, printWidth: 90 });
-      return squeezeBlankLines(out);
-    } catch {
-      return "/* CSS 优化失败，原文返回 */\n" + input;
-    }
-  }
-}
 
     // =============== 交互：普通格式化（含“CSS自动去重+短写”） ===============
     async function doFormat() {
@@ -864,24 +992,32 @@ function coalesceMedias(scope) {
       const singleQuote = document.getElementById("singleQuote").checked;
       const outputEl = document.getElementById("output");
       if (!input.trim()) { outputEl.value = ""; return; }
-  
+
       const parser = pickParser(langSel, input);
-  
-      // ★ 若是 CSS，默认自动：去重 + 短写 + 合并相同 @media
+
+      // ★ CSS：你已有的自动去重+短写，保持不变
       if (parser === "css") {
         const css = await optimizeCssText(input, /*beautify*/ true, tabWidth);
-        const finalCss = rmComments ? removeComments(css, "css") : css; // 一般不需要，但保留逻辑
+        const finalCss = rmComments ? removeComments(css, "css") : css;
         outputEl.value = finalCss;
         return;
       }
-  
-      // 其它语言：Prettier → 可选去注释 → 空行压缩
+
+      // ★ HTML：用“稳健格式化”，成功就直接返回，不再落入 catch
+      if (parser === "html") {
+  const html = await formatHtmlRobust(input, { tabWidth, rmComments });
+  document.getElementById("output").value = squeezeBlankLines(html);
+  return;
+}
+
+      // 其它语言：维持原逻辑
       try {
         let text = input;
         if (parser) {
           text = await prettier.format(text, {
             parser, plugins: prettierPlugins, tabWidth, useTabs: false,
-            semi, singleQuote, trailingComma: "as-needed", bracketSpacing: true, printWidth: 90, proseWrap: "preserve",
+            semi, singleQuote, trailingComma: "as-needed", bracketSpacing: true,
+            printWidth: 90, proseWrap: "preserve",
           });
         }
         if (rmComments) text = removeComments(text, parser || "plain");
@@ -891,10 +1027,11 @@ function coalesceMedias(scope) {
         let text = input;
         if (rmComments) text = removeComments(text, parser || "plain");
         text = squeezeBlankLines(text);
-        outputEl.value = text + "\n\n/* 提示：Prettier 解析失败，已降级为空行压缩（与可选注释移除）。 */";
+        // 这里只针对非 HTML 的失败给提示；HTML 已在上方走“稳健路径”不会进到这里
+        outputEl.value = text + "\n\n/* 提示：Prettier 解析失败或插件缺失，已降级处理。*/";
       }
     }
-  
+
     // =============== 交互：按钮“CSS 去重/覆盖优化” ===============
     async function optimizeCSS() {
       const input = document.getElementById("input").value;
@@ -902,15 +1039,15 @@ function coalesceMedias(scope) {
       const keepMinified = document.getElementById("cssMinified")?.checked;
       const outputEl = document.getElementById("output");
       if (!input.trim()) { outputEl.value = ""; return; }
-  
+
       const css = await optimizeCssText(input, /*beautify*/ !keepMinified, tabWidth);
       outputEl.value = css;
     }
-  
+
     // =============== 绑定事件（保持原有热键/复制等） ===============
     document.getElementById("format").addEventListener("click", doFormat);
     document.getElementById("optCss").addEventListener("click", optimizeCSS);
-  
+
     document.getElementById("copy").addEventListener("click", async () => {
       const v = document.getElementById("output").value;
       if (!v) return;
@@ -926,7 +1063,7 @@ function coalesceMedias(scope) {
         document.execCommand("copy");
       }
     });
-  
+
     window.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
@@ -934,7 +1071,7 @@ function coalesceMedias(scope) {
       }
     });
   </script>
-  
+
 </body>
 
 </html>
